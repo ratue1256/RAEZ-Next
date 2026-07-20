@@ -1,0 +1,14 @@
+# Normalise les fins de ligne : évite le bruit CRLF/LF entre Windows et Linux.
+* text=auto eol=lf
+
+# Scripts Windows : garder CRLF
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+
+# Binaires (au cas où) : jamais de conversion
+*.png binary
+*.jpg binary
+*.svg text
+*.onnx binary
+*.h5 binary
+*.ckpt binary

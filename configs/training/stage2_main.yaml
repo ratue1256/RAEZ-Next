@@ -1,0 +1,35 @@
+# hand_bone_tracker/configs/training/stage2_main.yaml
+stage: 2
+dataset: freihand
+backbone: mobilenetv3_large_100   # identique à tous les stages (transfert de poids)
+epochs: 100
+batch_size: 32
+num_workers: 4
+optimizer:
+  name: AdamW
+  lr: 0.0005
+  weight_decay: 0.0001
+  betas: [0.9, 0.999]
+scheduler:
+  name: OneCycleLR
+  max_lr: 0.0005
+  pct_start: 0.1
+freeze_backbone_epochs: 0
+loss:
+  lambda_heatmap: 1.0
+  lambda_coord2d: 1.0
+  lambda_3d: 2.0
+  lambda_3d_norm: 1.0
+  lambda_bone: 0.5
+  lambda_temporal: 0.0
+ema:
+  enabled: true
+  decay: 0.999
+early_stopping:
+  patience: 15
+  metric: val_mpjpe_3d
+  mode: min
+checkpoint:
+  save_every_n_epochs: 10
+  save_top_k: 3
+  monitor: val_mpjpe_3d

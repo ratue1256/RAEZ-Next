@@ -1,0 +1,35 @@
+# hand_bone_tracker/configs/training/stage3_finetune.yaml
+stage: 3
+dataset: freihand
+backbone: mobilenetv3_large_100   # identique à tous les stages (transfert de poids cohérent)
+epochs: 100
+batch_size: 64
+num_workers: 4
+optimizer:
+  name: AdamW
+  lr: 0.0001
+  weight_decay: 0.0001
+  betas: [0.9, 0.999]
+scheduler:
+  name: CosineAnnealingLR
+  T_max: 25
+  eta_min: 0.00001
+freeze_backbone_epochs: 0
+loss:
+  lambda_heatmap: 1.0
+  lambda_coord2d: 1.0
+  lambda_3d: 2.0
+  lambda_3d_norm: 1.0
+  lambda_bone: 0.5
+  lambda_temporal: 0.3
+ema:
+  enabled: true
+  decay: 0.9995
+early_stopping:
+  patience: 10
+  metric: val_mpjpe_3d
+  mode: min
+checkpoint:
+  save_every_n_epochs: 5
+  save_top_k: 3
+  monitor: val_mpjpe_3d

@@ -1,0 +1,35 @@
+# hand_bone_tracker/configs/training/stage1_pretrain.yaml
+stage: 1
+dataset: freihand
+backbone: mobilenetv3_large_100   # rapide CPU ; identique sur tous les stages (transfert de poids)
+epochs: 50
+batch_size: 32
+num_workers: 4
+optimizer:
+  name: AdamW
+  lr: 0.001
+  weight_decay: 0.0001
+  betas: [0.9, 0.999]
+scheduler:
+  name: CosineAnnealingLR
+  T_max: 50
+  eta_min: 0.00001
+freeze_backbone_epochs: 5
+loss:
+  lambda_heatmap: 1.0
+  lambda_coord2d: 1.0
+  lambda_3d: 2.0
+  lambda_3d_norm: 1.0
+  lambda_bone: 0.5
+  lambda_temporal: 0.0
+ema:
+  enabled: true
+  decay: 0.999
+early_stopping:
+  patience: 10
+  metric: val_mpjpe_3d
+  mode: min
+checkpoint:
+  save_every_n_epochs: 5
+  save_top_k: 3
+  monitor: val_mpjpe_3d

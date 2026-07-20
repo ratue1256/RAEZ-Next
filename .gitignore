@@ -1,0 +1,62 @@
+# ============================================================
+#  hand-bone-tracker — .gitignore
+#  On ne versionne QUE le code. Jamais les venv, données, poids.
+# ============================================================
+
+# --- Environnements Python ---
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- Données (9,6 Go) : trop volumineux pour git ---
+data/
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+
+# --- Poids / modèles / exports (binaires lourds) ---
+checkpoints/
+exports/
+*.ckpt
+*.pth
+*.pt
+*.onnx
+*.onnx_data
+
+# --- Logs & expériences ---
+logs/
+lightning_logs/
+wandb/
+*.log
+runs/
+
+# --- Node / dashboard React ---
+node_modules/
+gui/dashboard/node_modules/
+gui/dashboard/dist/
+gui/dashboard/.vite/
+
+# --- OS / IDE ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# --- Config locale Claude Code (personnelle, non partagée) ---
+.claude/settings.local.json
+
+# --- Secrets (par sécurité) ---
+.env
+.env.*
+*.key
+*.pem
+secrets.*
