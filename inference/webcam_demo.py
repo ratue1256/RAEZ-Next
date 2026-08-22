@@ -111,10 +111,11 @@ class HandTrackerRT:
         cx, cy = (x0 + x1) / 2.0, (y0 + y1) / 2.0
         side = max(x1 - x0, y1 - y0) * (1.0 + 2.0 * margin)
         side = max(side, 64.0)
-        x = int(np.clip(cx - side / 2.0, 0, max(0, W - 1)))
-        y = int(np.clip(cy - side / 2.0, 0, max(0, H - 1)))
-        w = int(min(side, W - x))
-        h = int(min(side, H - y))
+        side = min(side, float(min(W, H)))
+        x = int(np.clip(cx - side / 2.0, 0, max(0, W - side)))
+        y = int(np.clip(cy - side / 2.0, 0, max(0, H - side)))
+        w = int(side)
+        h = int(side)
         return (x, y, w, h)
 
     def _outputs_to_dict(self, outputs):

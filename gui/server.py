@@ -109,16 +109,34 @@ async def consume_logs():
         print("[RAEZ] Background log reader stopped.")
 
 
+# ── /health ───────────────────────────────────────────────────────────────────
+@app.get("/health")
+def health_check():
+    return {
+        "status": "healthy",
+        "service": "raez-hand-bone-tracker-backend",
+        "version": "2.0.0",
+        "cuda_available": torch.cuda.is_available(),
+    }
+
+
 # ── /status ───────────────────────────────────────────────────────────────────
 @app.get("/status")
 def get_status():
     global training_process
     is_running = bool(training_process and training_process.poll() is None)
     pid = training_process.pid if is_running else None
-    print(f"[RAEZ] Status: {'RUNNING (PID ' + str(pid) + ')' if is_running else 'IDLE'}")
+    
+    device_name = "CPU"
+    if torch.cuda.is_available():
+        try:
+            device_name = f"{torch.cuda.get_device_name(0)} (CUDA)"
+        except Exception:
+            device_name = "CUDA"
+            
     return {
         "is_running": is_running,
-        "device": "RTX 4070 (CUDA)",
+        "device": device_name,
         "project": "Hand & Bone Tracker",
         "pid": pid,
     }
