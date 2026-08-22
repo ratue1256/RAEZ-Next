@@ -1,51 +1,117 @@
-# hand-bone-tracker
+# Hand Bone Tracker (v2.0)
 
-> Tracking 3D main & os temps réel, optimisé CPU (v2.0)
+Real-time 3D hand and skeleton tracking with differentiable biomechanical constraints. Runs on CPU (60+ FPS in INT8) and CUDA.
 
-## Objectifs de performance (cibles, à atteindre après entraînement)
-> ⚠️ Ce sont des **objectifs de conception**, pas des mesures : aucun poids
-> entraîné n'est fourni. Ils se valident par l'entraînement sur FreiHAND/HO3D.
+Includes a complete PyTorch Lightning training pipeline, ONNX export/quantization tools, and a fullstack web dashboard (FastAPI + React).
 
-| Métrique | Cible | MediaPipe Hands v0.10 |
-|---|---|---|
-| MPJPE 3D FreiHAND | ~12 mm | ~15 mm |
-| FPS CPU (INT8) | 60+ | 35 |
-| Robustesse occlusion | élevée | faible |
+## Quick Start
 
-## Nouveautés v2.0
-- **Backbone mobile** (`mobilenetv3_large_100`) — rapide sur CPU.
-- **Couche biomécanique réelle** : cinématique directe différentiable (chaque os
-  garde sa direction, longueur bornée anatomiquement) au lieu d'un simple clamp.
-- **Supervision 2D directe** + **loss 3D invariante à l'échelle**.
-- **Confiance par articulation** (entropie des heatmaps) exploitée à l'inférence.
-- **Filtre One-Euro** adaptatif à la confiance (fluidité SOTA temps réel).
-- **EMA** des poids, **suivi ROI** adaptatif, rendu coloré par doigt.
-- Bugs bloquants corrigés (Kalman `NameError`, `Resize` d'augmentation manquant).
+### 1. Setup Environment
 
-## Installation
-
-### Local (Windows)
+**Windows:**
 ```powershell
 ./setup.ps1
 ```
 
-### Google Colab
-```python
-!pip install -r requirements_colab.txt
+**Linux / macOS:**
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-## Usage
+### 2. Launch the Web Dashboard
+Start both the FastAPI backend and the Vite frontend:
+
+```powershell
+# Windows
+./run_gui.ps1
+# or run run_gui.bat
+```
+Open `http://localhost:5173` to access the live training monitor, model testing, and data collector.
+
+---
+
+## Training
+
+The model trains in 3 progressive stages:
+
+```bash
+# Stage 1: Pre-training (Backbone frozen for 5 epochs, then full training)
+python scripts/train.py --config configs/training/stage1_pretrain.yaml
+
+# Stage 2: Main training on full dataset (OneCycleLR)
+python scripts/train.py --config configs/training/stage2_main.yaml --resume
+
+# Stage 3: Fine-tuning with low learning rate
+python scripts/train.py --config configs/training/stage3_finetune.yaml --resume
+```
+
+To train on your custom poses collected via the dashboard:
+```bash
+python scripts/train.py --config configs/training/stage1_pretrain.yaml
+# Custom samples in data/raw/custom are automatically detected and mixed in.
+```
+
+---
+
+## Export & INT8 Quantization
+
+Convert your best PyTorch checkpoint to ONNX and quantize to INT8:
+
+```bash
+# 1. Export PyTorch checkpoint -> ONNX FP32
+python scripts/export_onnx.py
+
+# 2. Quantize ONNX -> INT8 (uses calibration data)
+python scripts/quantize.py
+```
+
+Outputs are saved in `exports/`:
+- `exports/hand_tracker.onnx`
+- `exports/hand_tracker_simplified.onnx`
+- `exports/hand_tracker_int8.onnx`
+
+---
+
+## Real-Time Webcam Demo
+
+Run standalone inference on your webcam with One-Euro temporal filtering:
+
 ```python
 from inference.webcam_demo import HandTrackerRT
-tracker = HandTrackerRT(model_path='exports/hand_tracker_int8.onnx')
-tracker.run_webcam()
+
+tracker = HandTrackerRT(
+    model_path="exports/hand_tracker_int8.onnx",
+    use_gpu=True,
+    target_fps=30.0
+)
+tracker.run_webcam(camera_id=0)
 ```
 
-## Structure du projet
-- `configs/`: Fichiers de configuration Hydra (YAML)
-- `models/`: Architecture PyTorch et fonctions de loss
-- `datasets/`: Scripts de chargement et d'augmentation
-- `training/`: Module Lightning, callbacks (EMA, checkpoints)
-- `inference/`: Inférence ONNX et filtrage temporel (One-Euro / Kalman)
-- `scripts/`: Utilitaires de préprocessing, export et quantization
-- `notebooks/`: Tutoriels et expérimentations
+Press `q` to exit, `r` to reset the tracking ROI.
+
+---
+
+## Architecture
+
+- **Backbone:** `mobilenetv3_large_100` (fast CPU inference).
+- **2D Head:** 21 heatmaps (64x64) with soft-argmax integral regression for sub-pixel accuracy.
+- **3D Head:** Metric regression with differentiable Forward Kinematics (`BiomechanicalFKLayer`) enforcing realistic bone lengths.
+- **Confidence:** Per-joint reliability derived from heatmap entropy ($1 - H / \ln N$).
+- **Filtering:** Adaptive One-Euro filter dynamically modulated by joint confidence.
+
+---
+
+## Project Structure
+
+```
+hand_bone_tracker/
+├── configs/          # Training configs (YAML)
+├── datasets/         # FreiHAND, Custom loaders, and augmentations
+├── gui/              # FastAPI backend & React/Vite dashboard
+├── inference/        # ONNX runtime & One-Euro filter
+├── models/           # HandBoneTracker architecture & CombinedLoss
+├── scripts/          # train, export_onnx, quantize, preprocess
+└── setup.ps1         # Windows automated install script
+```
