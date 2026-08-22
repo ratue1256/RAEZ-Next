@@ -70,7 +70,9 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                     {row.name}
                     {row.isCustom && <span className="px-1.5 py-0.5 text-[9px] bg-sky-500 text-white rounded font-mono">VOUS</span>}
                   </td>
-                  <td className="py-3 text-right font-mono text-emerald-400">{row.mpjpe.toFixed(1)} mm</td>
+                  <td className="py-3 text-right font-mono text-emerald-400">
+                    {Number.isFinite(row.mpjpe) ? `${row.mpjpe.toFixed(1)} mm` : "— (aucun run)"}
+                  </td>
                   <td className="py-3 text-right font-mono">{row.latency.toFixed(1)} ms</td>
                   <td className="py-3 text-right font-mono">{row.fps.toFixed(0)} FPS</td>
                   <td className="py-3 text-right font-mono text-slate-500">{row.params}</td>

@@ -41,6 +41,24 @@ export const TestingTab: React.FC<TestingTabProps> = ({
   videoRef,
   canvasRef
 }) => {
+  // Natural size of the uploaded image: model coords are relative to the full
+  // frame, but the <img> uses object-contain (letterboxed) -> remap dot positions.
+  const [naturalSize, setNaturalSize] = React.useState<{ w: number; h: number } | null>(null);
+
+  const jointOverlayStyle = (kp: number[]): React.CSSProperties => {
+    const fx = kp[0] / 256;
+    const fy = kp[1] / 256;
+    if (!naturalSize || naturalSize.w <= 0 || naturalSize.h <= 0) {
+      return { left: `${fx * 100}%`, top: `${fy * 100}%` };
+    }
+    const { w, h } = naturalSize;
+    const longSide = Math.max(w, h);
+    return {
+      left: `${50 + (fx - 0.5) * (w / longSide) * 100}%`,
+      top: `${50 + (fy - 0.5) * (h / longSide) * 100}%`
+    };
+  };
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
       <div className="xl:col-span-2 glass p-5 rounded-2xl flex flex-col items-center">
@@ -115,12 +133,17 @@ export const TestingTab: React.FC<TestingTabProps> = ({
             <>
               {testImage ? (
                 <div className="relative w-full h-full">
-                  <img src={testImage} className="w-full h-full object-contain" alt="test" />
+                  <img
+                    src={testImage}
+                    className="w-full h-full object-contain"
+                    alt="test"
+                    onLoad={(e) => setNaturalSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+                  />
                   {testResults && !testResults.error && testResults.keypoints?.map((kp: number[], i: number) => (
                     <div
                       key={i}
                       className="absolute w-2.5 h-2.5 bg-cyan-400 rounded-full -translate-x-1/2 -translate-y-1/2 shadow-[0_0_8px_rgba(34,211,238,0.9)] border border-white/30"
-                      style={{ left: `${(kp[0] / 256) * 100}%`, top: `${(kp[1] / 256) * 100}%` }}
+                      style={jointOverlayStyle(kp)}
                       title={`Joint ${i}`}
                     />
                   ))}

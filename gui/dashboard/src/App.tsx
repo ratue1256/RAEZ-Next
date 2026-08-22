@@ -76,6 +76,17 @@ export function App() {
   const [transitionActive, setTransitionActiveState] = useState<boolean>(false);
   const [transitionTimeLeft, setTransitionTimeLeftState] = useState<number>(1.2);
 
+  // Live values mirrored into refs so async loops never act on stale closures
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+  const testModeRef = useRef(testMode);
+  testModeRef.current = testMode;
+  const webcamActiveRef = useRef(webcamActive);
+  webcamActiveRef.current = webcamActive;
+  const inferenceModeRef = useRef(inferenceMode);
+  inferenceModeRef.current = inferenceMode;
+  const transitionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // Sync refs to prevent stale closure captures in loops
   const sessionActiveRef = useRef<boolean>(false);
   const detectedHandRef = useRef<string>("Aucune");
@@ -227,6 +238,10 @@ export function App() {
       myDataStreamRef.current.getTracks().forEach((track) => track.stop());
       myDataStreamRef.current = null;
     }
+    if (transitionIntervalRef.current) {
+      clearInterval(transitionIntervalRef.current);
+      transitionIntervalRef.current = null;
+    }
     setMyDataActive(false);
     lastProcessedTimeRef.current = -1;
   };
@@ -350,7 +365,9 @@ export function App() {
   };
 
   const runLiveInference = async () => {
-    if (activeTab !== 'testing' || testMode !== 'webcam' || !webcamStreamRef.current || !videoRef.current || !canvasRef.current) return;
+    // Guard against stale closures: an in-flight loop must die as soon as
+    // the user leaves the tab or stops the camera.
+    if (activeTabRef.current !== 'testing' || testModeRef.current !== 'webcam' || !webcamStreamRef.current || !videoRef.current || !canvasRef.current) return;
     const video = videoRef.current;
     if (video.currentTime === lastProcessedTimeRef.current) return;
     lastProcessedTimeRef.current = video.currentTime;
@@ -363,7 +380,7 @@ export function App() {
     const imgBase64 = canvas.toDataURL('image/jpeg', 0.6);
 
     try {
-      const res = await axios.post(`${API_BASE}/test-image`, { image: imgBase64, mode: inferenceMode });
+      const res = await axios.post(`${API_BASE}/test-image`, { image: imgBase64, mode: inferenceModeRef.current });
       if (res.data) {
         if (res.data.error) {
           setTestResults({ error: res.data.error });
@@ -381,17 +398,25 @@ export function App() {
   };
 
   useEffect(() => {
-    let timerId: any = null;
+    let stopped = false;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+
     const runLoop = async () => {
-      if (activeTab === 'testing' && testMode === 'webcam' && webcamActive) {
-        await runLiveInference();
-        timerId = setTimeout(runLoop, gpuBoost ? 10 : 40);
+      // Re-check live refs after every await so the loop cannot outlive
+      // the camera session (ghost inference loop fix).
+      if (stopped || activeTabRef.current !== 'testing' || testModeRef.current !== 'webcam' || !webcamActiveRef.current || !webcamStreamRef.current) {
+        return;
       }
+      await runLiveInference();
+      if (stopped) return;
+      timerId = setTimeout(runLoop, gpuBoost ? 10 : 40);
     };
+
     if (activeTab === 'testing' && testMode === 'webcam' && webcamActive) {
       runLoop();
     }
     return () => {
+      stopped = true;
       if (timerId) clearTimeout(timerId);
     };
   }, [webcamActive, testMode, activeTab, gpuBoost]);
@@ -466,11 +491,13 @@ export function App() {
           setTransitionActive(true);
           setTransitionTimeLeft(1.2);
 
+          if (transitionIntervalRef.current) clearInterval(transitionIntervalRef.current);
           let timeLeft = 1.2;
-          const intervalId = setInterval(() => {
+          transitionIntervalRef.current = setInterval(() => {
             timeLeft -= 0.1;
             if (timeLeft <= 0.05) {
-              clearInterval(intervalId);
+              if (transitionIntervalRef.current) clearInterval(transitionIntervalRef.current);
+              transitionIntervalRef.current = null;
               setTransitionActive(false);
               setCurrentStepIdx(nextStepIdx);
             } else {
@@ -702,36 +729,43 @@ export function App() {
   };
 
   // ── Computed metrics & SOTA Leaderboard ──────────────────────────────────────
-  const bestMPJPE = metrics.length > 0
-    ? Math.min(...metrics.filter((m) => m.val_mpjpe_3d !== undefined && m.val_mpjpe_3d !== null).map((m) => parseFloat(m.val_mpjpe_3d)))
-    : null;
+  const toNumber = (value: unknown): number | null => {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (typeof value === 'string' && value.trim() !== '') {
+      const parsed = parseFloat(value);
+      return Number.isNaN(parsed) ? null : parsed;
+    }
+    return null;
+  };
+
+  const mpjpeValues = metrics
+    .map((m) => toNumber(m.val_mpjpe_3d))
+    .filter((v): v is number => v !== null);
+  const bestMPJPE = mpjpeValues.length > 0 ? Math.min(...mpjpeValues) : null;
 
   const latestTrainLoss = (() => {
     for (let i = metrics.length - 1; i >= 0; i--) {
-      const val = metrics[i].train_total;
-      if (val !== undefined && val !== null && val !== "" && !isNaN(parseFloat(val))) {
-        return val;
-      }
+      const value = toNumber(metrics[i].train_total);
+      if (value !== null) return value;
     }
     return null;
   })();
 
   const latestValLoss = (() => {
     for (let i = metrics.length - 1; i >= 0; i--) {
-      const val = metrics[i].val_total;
-      if (val !== undefined && val !== null && val !== "" && !isNaN(parseFloat(val))) {
-        return val;
-      }
+      const value = toNumber(metrics[i].val_total);
+      if (value !== null) return value;
     }
     return null;
   })();
 
-  const customMpjpe = bestMPJPE !== null && bestMPJPE < 900 ? bestMPJPE * 1000 : 12.4;
-  const customLatency = lastInferenceLatency !== null ? lastInferenceLatency : 2.8;
+  // MPJPE is logged in meters -> display mm. Ignore absurd values (>1 m).
+  const customMpjpe = bestMPJPE !== null && bestMPJPE < 1 ? bestMPJPE * 1000 : null;
+  const customLatency = lastInferenceLatency ?? 2.8;
   const customFps = 1000 / customLatency;
 
   const leaderboardData = [
-    { name: "Votre Modèle RAEZ (MobileNetV3 INT8)", mpjpe: customMpjpe, latency: customLatency, fps: customFps, params: "5.2M", isCustom: true },
+    { name: "Votre Modèle RAEZ (MobileNetV3 INT8)", mpjpe: customMpjpe ?? Number.POSITIVE_INFINITY, latency: customLatency, fps: customFps, params: "5.2M", isCustom: true },
     { name: "ViTPose-B (SOTA S-Tier GPU)", mpjpe: 32.4, latency: 28.2, fps: 35.4, params: "86.4M", isCustom: false },
     { name: "MediaPipe Hands v0.10 (Heavy)", mpjpe: 48.2, latency: 12.1, fps: 82.6, params: "4.5M", isCustom: false },
     { name: "MediaPipe Hands v0.10 (Lite)", mpjpe: 56.7, latency: 5.2, fps: 192.3, params: "1.8M", isCustom: false },

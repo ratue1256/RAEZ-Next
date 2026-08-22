@@ -31,8 +31,9 @@ export function mergeMetricsByStep(rawMetrics: any[]): MetricRow[] {
   const sortedSteps = Array.from(mergedMap.values()).sort((a, b) => a.step - b.step);
   let lastEpoch = 0;
   for (const row of sortedSteps) {
-    if (row.epoch !== undefined && row.epoch !== null && row.epoch !== "") {
-      const epochNum = typeof row.epoch === 'number' ? row.epoch : parseFloat(row.epoch);
+    const rawEpoch = row.epoch;
+    if (rawEpoch !== undefined && rawEpoch !== null) {
+      const epochNum = typeof rawEpoch === 'number' ? rawEpoch : parseFloat(String(rawEpoch));
       if (!isNaN(epochNum)) {
         lastEpoch = epochNum;
       }

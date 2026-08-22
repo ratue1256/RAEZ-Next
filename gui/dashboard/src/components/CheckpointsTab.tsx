@@ -35,9 +35,9 @@ export const CheckpointsTab: React.FC<CheckpointsTabProps> = ({
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {checkpoints.map((ckpt, i) => (
+        {checkpoints.map((ckpt) => (
           <div
-            key={i}
+            key={ckpt.path}
             className="glass p-5 rounded-2xl border-l-4 border-sky-500 hover:scale-[1.02] transition-transform flex flex-col justify-between"
           >
             <div>
