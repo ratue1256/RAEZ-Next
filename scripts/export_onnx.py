@@ -49,7 +49,7 @@ def _load_weights(model: HandBoneTracker, checkpoint: dict):
 
 
 def export_to_onnx(checkpoint_path: str, output_path: str):
-    backbone_name = "efficientnet_b0"
+    backbone_name = "mobilenetv3_large_100"
     checkpoint = None
     if os.path.exists(checkpoint_path):
         print(f"Chargement du checkpoint : {checkpoint_path}")

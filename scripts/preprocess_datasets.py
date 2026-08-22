@@ -38,24 +38,26 @@ def save_to_h5(indices, raw_path, keypoints_3d, camera_matrices, output_file, de
     with h5py.File(output_file, 'w') as f:
         images_ds = f.create_dataset('images',
                                      shape=(n_samples, 256, 256, 3),
+                                     maxshape=(n_samples, 256, 256, 3),
                                      dtype=np.uint8,
                                      chunks=(32, 256, 256, 3), # Better for writing
                                      compression='lzf')
         
         kpts_ds = f.create_dataset('keypoints_3d',
                                    shape=(n_samples, 21, 3),
+                                   maxshape=(n_samples, 21, 3),
                                    dtype=np.float32)
         
         kpts_2d_ds = f.create_dataset('keypoints_2d',
                                       shape=(n_samples, 21, 2),
+                                      maxshape=(n_samples, 21, 2),
                                       dtype=np.float32)
         
-        for i, idx in enumerate(tqdm(indices, desc=desc)):
+        write_idx = 0
+        for idx in tqdm(indices, desc=desc):
             img_path = raw_path / 'training' / 'rgb' / f'{idx:08d}.jpg'
             img = cv2.imread(str(img_path))
             if img is None:
-                # Fill with zeros or skip? Let's skip and adjust n_samples later or just put zeros.
-                # Actually FreiHAND should have all images.
                 print(f"Warning: Missing image {img_path}")
                 continue
             
@@ -74,12 +76,18 @@ def save_to_h5(indices, raw_path, keypoints_3d, camera_matrices, output_file, de
             # Normaliser profondeur (relatif au poignet)
             xyz_normalized = xyz - xyz[0:1, :]
             
-            images_ds[i] = img
-            kpts_ds[i] = xyz_normalized.astype(np.float32)
-            kpts_2d_ds[i] = uv.astype(np.float32)
+            images_ds[write_idx] = img
+            kpts_ds[write_idx] = xyz_normalized.astype(np.float32)
+            kpts_2d_ds[write_idx] = uv.astype(np.float32)
+            write_idx += 1
 
-            if i % 1000 == 0:
+            if write_idx % 1000 == 0:
                 f.flush()
+
+        if write_idx < n_samples:
+            images_ds.resize((write_idx, 256, 256, 3))
+            kpts_ds.resize((write_idx, 21, 3))
+            kpts_2d_ds.resize((write_idx, 21, 2))
 
 def preprocess_freihand(raw_path: Path, output_dir: Path):
     """Convertit FreiHAND en HDF5 avec split Train/Val/Test."""

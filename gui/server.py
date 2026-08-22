@@ -192,7 +192,6 @@ async def start_train(stage: int = 1, resume: bool = True):
     return {"message": f"Training stage {stage} started", "pid": training_process.pid}
 
 
-# ── /stop-train ───────────────────────────────────────────────────────────────
 @app.post("/stop-train")
 def stop_train():
     global training_process
@@ -201,13 +200,23 @@ def stop_train():
         return {"error": "No training process running"}
 
     pid = training_process.pid
-    print(f"[RAEZ] Stopping PID {pid}...")
+    print(f"[RAEZ] Stopping PID {pid} (and all child processes)...")
     try:
-        os.kill(pid, signal.CTRL_BREAK_EVENT)
-        print(f"[RAEZ] CTRL_BREAK sent to process group {pid}")
+        import psutil
+        parent = psutil.Process(pid)
+        for child in parent.children(recursive=True):
+            try:
+                child.kill()
+            except Exception:
+                pass
+        parent.kill()
+        print(f"[RAEZ] Process tree for PID {pid} killed cleanly.")
     except Exception as e:
-        print(f"[RAEZ] Error stopping process: {e}")
-        training_process.kill()
+        print(f"[RAEZ] Error stopping process tree via psutil, fallback to standard kill: {e}")
+        try:
+            training_process.kill()
+        except Exception:
+            pass
 
     training_process = None
     return {"message": "Training stopped"}
@@ -359,7 +368,7 @@ def load_checkpoint_into_model(checkpoint_path: str):
         
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
         config = checkpoint.get('hyper_parameters', {}).get('config', {})
-        backbone_name = config.get('backbone', 'efficientnet_b0')
+        backbone_name = config.get('backbone', 'mobilenetv3_large_100')
         print(f"[RAEZ] Detected backbone from checkpoint: {backbone_name}")
         
         model = HandBoneTracker(backbone_name=backbone_name, pretrained=False)

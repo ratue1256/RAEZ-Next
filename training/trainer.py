@@ -8,11 +8,11 @@ class HandTrackerLightning(L.LightningModule):
     def __init__(self, config):
         super().__init__()
         self.save_hyperparameters()
-        backbone_name = config.get('backbone', 'efficientnet_b0')
+        backbone_name = config.get('backbone', 'mobilenetv3_large_100')
         self.model = HandBoneTracker(
             backbone_name=backbone_name,
             pretrained=True,
-            freeze_backbone_epochs=config['freeze_backbone_epochs']
+            freeze_backbone_epochs=config.get('freeze_backbone_epochs', 0)
         )
         loss_cfg = config['loss']
         self.loss_fn = CombinedHandLoss(

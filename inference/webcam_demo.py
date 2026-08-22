@@ -22,7 +22,10 @@ import cv2
 import numpy as np
 import onnxruntime as ort
 
-from kalman_filter import OneEuroFilter
+try:
+    from inference.kalman_filter import OneEuroFilter
+except (ImportError, ModuleNotFoundError):
+    from kalman_filter import OneEuroFilter
 
 # --- topologie & couleurs (BGR) par doigt -----------------------------------
 BONE_CONNECTIONS = [

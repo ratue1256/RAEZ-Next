@@ -9,6 +9,10 @@ from onnxruntime.quantization import (
 import numpy as np
 import onnxruntime as ort
 import os
+from pathlib import Path
+
+IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 3, 1, 1)
+IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 3, 1, 1)
 
 class HandCalibrationReader(CalibrationDataReader):
     def __init__(self, calibration_images: list, n_samples: int = 100):
@@ -31,14 +35,17 @@ def load_calibration_data(h5_path: str, n_samples: int = 100):
     print(f"Chargement de {n_samples} échantillons de calibration depuis {h5_path}...")
     with h5py.File(h5_path, 'r') as f:
         images = f['images'][:n_samples]
-    # Convert N, H, W, C to N, C, H, W and normalize [0, 1]
+    # Convert N, H, W, C to N, C, H, W and normalize ImageNet
     images = images.transpose(0, 3, 1, 2).astype(np.float32) / 255.0
+    images = (images - IMAGENET_MEAN) / IMAGENET_STD
     return list(images)
 
 def quantize_model(input_path: str, output_path: str, calibration_data=None):
     if not os.path.exists(input_path):
         print(f"Modèle source non trouvé : {input_path}")
         return
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     if calibration_data is not None:
         print("Exécution de la quantization statique (INT8) avec calibration...")
@@ -87,11 +94,21 @@ def quantize_model(input_path: str, output_path: str, calibration_data=None):
     print(f"INT8 : {fps_int8:.1f} FPS (+{((fps_int8/fps_fp32)-1)*100:.0f}%)")
 
 if __name__ == '__main__':
-    h5_path = 'hand_bone_tracker/data/processed/freihand_val.h5'
-    calib_data = load_calibration_data(h5_path, n_samples=100)
+    project_root = Path(__file__).resolve().parent.parent
+    h5_path = project_root / 'data' / 'processed' / 'freihand_val.h5'
+    if not h5_path.exists():
+        h5_path = project_root / 'data' / 'processed' / 'synthetic_val.h5'
+
+    calib_data = load_calibration_data(str(h5_path), n_samples=100)
     
+    src_onnx = project_root / 'exports' / 'hand_tracker_simplified.onnx'
+    if not src_onnx.exists():
+        src_onnx = project_root / 'exports' / 'hand_tracker.onnx'
+
+    dst_onnx = project_root / 'exports' / 'hand_tracker_int8.onnx'
+
     quantize_model(
-        'hand_bone_tracker/exports/hand_tracker_simplified.onnx',
-        'hand_bone_tracker/exports/hand_tracker_int8.onnx',
+        str(src_onnx),
+        str(dst_onnx),
         calibration_data=calib_data
     )

@@ -51,21 +51,20 @@ class CustomHandDataset(Dataset):
         img = Image.open(sample["img_path"]).convert("RGB")
         img_np = np.array(img)
         
-        kpts_2d = sample["keypoints_2d"]
+        kpts_2d_px = sample["keypoints_2d"].copy()  # Already in pixels [0, 256]
         kpts_3d = sample["keypoints_3d"]
         
         if self.transform:
-            # transform expects keypoints in pixels [0, 256]
-            kpts_2d_px = kpts_2d * 256.0
+            # Albumentations expects keypoints in pixel range [0, 256]
             augmented = self.transform(image=img_np, keypoints=kpts_2d_px)
             img_tensor = augmented['image']
-            kpts_2d = torch.tensor(augmented['keypoints']) / 256.0
+            kpts_2d = torch.tensor(augmented['keypoints'], dtype=torch.float32) / 256.0
         else:
             img_tensor = torch.from_numpy(img_np).permute(2, 0, 1).float() / 255.0
-            kpts_2d = torch.from_numpy(kpts_2d)
+            kpts_2d = torch.from_numpy(kpts_2d_px).float() / 256.0
             
         return {
             'image': img_tensor,
-            'joints_3d': torch.from_numpy(kpts_3d),
+            'joints_3d': torch.from_numpy(kpts_3d).float(),
             'coords_2d': kpts_2d
         }

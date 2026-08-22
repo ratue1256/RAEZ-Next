@@ -32,13 +32,13 @@ class FreiHANDDataset(Dataset):
             kpts_2d_px = kpts_2d * 256.0
             augmented = self.transform(image=image, keypoints=kpts_2d_px)
             image = augmented['image']
-            kpts_2d = torch.tensor(augmented['keypoints']) / 256.0
+            kpts_2d = torch.tensor(augmented['keypoints'], dtype=torch.float32) / 256.0
         else:
             image = torch.from_numpy(image).permute(2, 0, 1).float() / 255.0
-            kpts_2d = torch.from_numpy(kpts_2d)
+            kpts_2d = torch.from_numpy(kpts_2d).float()
 
         return {
             'image': image,
-            'joints_3d': torch.from_numpy(kpts_3d),
+            'joints_3d': torch.from_numpy(kpts_3d).float(),
             'coords_2d': kpts_2d
         }

@@ -149,7 +149,8 @@ class BiomechanicalFKLayer(nn.Module):
             direction = bone / length
 
             max_l = self.max_len[i]
-            clamped = length.clamp(min=float(max_l) * self.min_ratio, max=float(max_l))
+            min_l = max_l * self.min_ratio
+            clamped = length.clamp(min=min_l, max=max_l)
             rebuilt.append(rebuilt[parent] + direction * clamped)
 
         out = torch.stack(rebuilt, dim=1)  # (B, 21, 3)
@@ -171,7 +172,7 @@ class HandBoneTracker(nn.Module):
         num_keypoints: int = 21,
         pretrained: bool = True,
         freeze_backbone_epochs: int = 5,
-        softargmax_beta: float = 100.0,
+        softargmax_beta: float = 50.0,
     ):
         super().__init__()
         self.num_keypoints = num_keypoints
@@ -201,8 +202,10 @@ class HandBoneTracker(nn.Module):
     # -- soft-argmax différentiable (régression intégrale sous-pixel) ----------
     def heatmaps_to_coords(self, heatmaps: torch.Tensor):
         B, K, H, W = heatmaps.shape
-        flat = heatmaps.view(B, K, -1)
-        prob = F.softmax(flat * self.softargmax_beta, dim=-1).view(B, K, H, W)
+        flat = heatmaps.view(B, K, -1).float()
+        # Soustraction du max pour stabilité numérique absolue sous FP16 mixed-precision
+        flat_scaled = (flat - flat.max(dim=-1, keepdim=True).values) * self.softargmax_beta
+        prob = F.softmax(flat_scaled, dim=-1).view(B, K, H, W).to(heatmaps.dtype)
 
         ys = torch.linspace(0, 1, H, device=heatmaps.device, dtype=heatmaps.dtype)
         xs = torch.linspace(0, 1, W, device=heatmaps.device, dtype=heatmaps.dtype)
@@ -221,9 +224,12 @@ class HandBoneTracker(nn.Module):
         """
         B, K, H, W = heatmaps.shape
         n = H * W
-        prob = F.softmax(heatmaps.view(B, K, n), dim=-1)          # softmax NON durci
+        flat = heatmaps.view(B, K, n).float()
+        flat_norm = flat - flat.max(dim=-1, keepdim=True).values
+        prob = F.softmax(flat_norm, dim=-1)          # softmax NON durci
         entropy = -(prob * (prob + 1e-12).log()).sum(dim=-1)      # (B, 21)
-        return (1.0 - entropy / math.log(n)).clamp(0.0, 1.0)
+        conf = (1.0 - entropy / math.log(n)).clamp(0.0, 1.0)
+        return conf.to(heatmaps.dtype)
 
     def forward(self, x: torch.Tensor) -> dict:
         features = self.backbone(x)[-1]

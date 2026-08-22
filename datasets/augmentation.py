@@ -8,16 +8,13 @@ train_transform = A.Compose([
     # ex. webcam custom). Doit rester en tête du pipeline.
     A.Resize(height=256, width=256),
 
-    # Géométriques
-    A.HorizontalFlip(p=0.5),
-    A.Rotate(limit=(-30, 30), p=0.7),
+    # Translation légère et cadrage (préserve la cohérence 2D/3D sans rotation/chiralité désynchronisée)
     A.Affine(
-        translate_percent={"x": (-0.1, 0.1), "y": (-0.1, 0.1)},
-        scale=(0.8, 1.2),
+        translate_percent={"x": (-0.05, 0.05), "y": (-0.05, 0.05)},
+        scale=(0.95, 1.05),
         rotate=0,
-        p=0.5
+        p=0.4
     ),
-    A.Perspective(scale=(0.05, 0.1), p=0.3),
     
     # Couleur / luminosité
     A.RandomBrightnessContrast(

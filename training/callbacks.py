@@ -1,4 +1,4 @@
-# hand_bone_tracker/training/callbacks.py
+import torch
 import pytorch_lightning as L
 from pytorch_lightning.callbacks import (
     ModelCheckpoint,
@@ -13,11 +13,7 @@ class EMACallback(Callback):
     Moyenne mobile exponentielle (EMA) des poids.
 
     Les poids EMA sont plus lisses et généralisent mieux -> tracking plus fiable
-    et fluide. Stratégie :
-      * mise à jour de l'ombre (shadow) à chaque batch, avec warmup du decay ;
-      * pendant la validation, on bascule sur les poids EMA (les métriques et la
-        sélection du meilleur checkpoint reflètent donc l'EMA) ;
-      * le checkpoint sauvegardé contient les poids EMA (injection dans state_dict).
+    et fluide. Stratégie optimisée sans recréer le state_dict complet à chaque batch.
     """
 
     def __init__(self, decay: float = 0.999):
@@ -27,40 +23,59 @@ class EMACallback(Callback):
         self.backup = {}
         self._n = 0
 
-    def _float_state(self, pl_module):
-        return {k: v for k, v in pl_module.state_dict().items()
-                if v.is_floating_point()}
-
     def on_fit_start(self, trainer, pl_module):
         if not self.shadow:
-            self.shadow = {k: v.detach().clone() for k, v in self._float_state(pl_module).items()}
+            self.shadow = {
+                name: param.detach().clone()
+                for name, param in pl_module.named_parameters()
+                if param.dtype.is_floating_point
+            }
+            self.shadow.update({
+                name: buf.detach().clone()
+                for name, buf in pl_module.named_buffers()
+                if buf.dtype.is_floating_point
+            })
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         self._n += 1
         d = min(self.decay, (1 + self._n) / (10 + self._n))  # warmup
-        state = pl_module.state_dict()
-        for k in self.shadow:
-            self.shadow[k].mul_(d).add_(state[k].detach(), alpha=1.0 - d)
+        with torch.no_grad():
+            for name, param in pl_module.named_parameters():
+                if name in self.shadow and param.dtype.is_floating_point:
+                    self.shadow[name].mul_(d).add_(param.data, alpha=1.0 - d)
+            for name, buf in pl_module.named_buffers():
+                if name in self.shadow and buf.dtype.is_floating_point:
+                    self.shadow[name].mul_(d).add_(buf.data, alpha=1.0 - d)
 
     def on_validation_epoch_start(self, trainer, pl_module):
         if not self.shadow:
             return
-        state = pl_module.state_dict()
-        self.backup = {k: state[k].detach().clone() for k in self.shadow}
-        for k in self.shadow:
-            state[k].copy_(self.shadow[k])
+        self.backup = {}
+        with torch.no_grad():
+            for name, param in pl_module.named_parameters():
+                if name in self.shadow:
+                    self.backup[name] = param.data.clone()
+                    param.data.copy_(self.shadow[name])
+            for name, buf in pl_module.named_buffers():
+                if name in self.shadow:
+                    self.backup[name] = buf.data.clone()
+                    buf.data.copy_(self.shadow[name])
 
     def on_validation_epoch_end(self, trainer, pl_module):
         if not self.backup:
             return
-        state = pl_module.state_dict()
-        for k in self.backup:
-            state[k].copy_(self.backup[k])
+        with torch.no_grad():
+            for name, param in pl_module.named_parameters():
+                if name in self.backup:
+                    param.data.copy_(self.backup[name])
+            for name, buf in pl_module.named_buffers():
+                if name in self.backup:
+                    buf.data.copy_(self.backup[name])
         self.backup = {}
 
     def on_save_checkpoint(self, trainer, pl_module, checkpoint):
         # Le checkpoint sur disque contient les poids EMA.
-        if self.shadow:
+        if self.shadow and "state_dict" in checkpoint:
             for k, v in self.shadow.items():
                 if k in checkpoint["state_dict"]:
                     checkpoint["state_dict"][k] = v.detach().clone()
@@ -78,13 +93,14 @@ class EMACallback(Callback):
 def get_callbacks(config):
     callbacks = []
 
+    mode = config.get("checkpoint", {}).get("mode", config.get("early_stopping", {}).get("mode", "min"))
     checkpoint_callback = ModelCheckpoint(
         dirpath="checkpoints/",
         filename="hand-tracker-{epoch:02d}-{val_mpjpe_3d:.4f}",
         save_top_k=config["checkpoint"]["save_top_k"],
         verbose=True,
         monitor=config["checkpoint"]["monitor"],
-        mode=config["early_stopping"]["mode"],
+        mode=mode,
         save_last=True,
     )
     callbacks.append(checkpoint_callback)

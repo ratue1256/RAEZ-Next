@@ -82,10 +82,10 @@ class CombinedHandLoss(nn.Module):
 
     @staticmethod
     def scale_invariant_3d_loss(pred: torch.Tensor, gt: torch.Tensor) -> torch.Tensor:
-        """Aligne l'échelle globale (facteur scalaire par échantillon) avant L1."""
+        """Aligne l'échelle globale (facteur scalaire positif par échantillon) avant L1."""
         num = (pred * gt).sum(dim=(1, 2))
         den = (pred * pred).sum(dim=(1, 2)).clamp(min=1e-8)
-        scale = (num / den).detach().view(-1, 1, 1)
+        scale = (num / den).clamp(min=1e-4).detach().view(-1, 1, 1)
         return F.l1_loss(scale * pred, gt)
 
     # ---------------------------------------------------------------- forward
