@@ -26,7 +26,12 @@ export function getFingerStates(landmarks: any[]) {
   const iy = landmarks[8].y - landmarks[5].y;
   const indexLength = Math.sqrt(ix * ix + iy * iy);
 
-  const thumbExtended = thumbDist > indexLength * 0.65 && landmarks[4].y < landmarks[2].y + 0.08;
+  // Thumb extended = tip clearly farther from its base than the IP joint is,
+  // AND separated from the index MCP (not tucked along the palm).
+  const d42 = Math.hypot(landmarks[4].x - landmarks[2].x, landmarks[4].y - landmarks[2].y);
+  const d32 = Math.hypot(landmarks[3].x - landmarks[2].x, landmarks[3].y - landmarks[2].y);
+  const thumbExtended =
+    d42 > d32 * 1.15 && thumbDist > indexLength * 0.65;
 
   return {
     thumb: thumbExtended,
@@ -38,6 +43,9 @@ export function getFingerStates(landmarks: any[]) {
 }
 
 export function classifyPose(landmarks: any[]): string | null {
+  if (!landmarks || landmarks.length < 21) {
+    return null;
+  }
   const { thumb, index, middle, ring, pinky } = getFingerStates(landmarks);
 
   // 1. Victory/Peace
@@ -48,17 +56,17 @@ export function classifyPose(landmarks: any[]): string | null {
   if (!index && middle && !ring && !pinky) {
     return "middle_finger";
   }
-  // 3. Fist
-  if (!index && !middle && !ring && !pinky) {
-    return "fist";
-  }
-  // 4. Open Hand
-  if (index && middle && ring && pinky) {
-    return "open_hand";
-  }
-  // 5. Thumbs Up
+  // 3. Thumbs Up (must be tested before Fist: a raised thumb is not a fist)
   if (thumb && !index && !middle && !ring && !pinky) {
     return "thumbs_up";
+  }
+  // 4. Fist
+  if (!thumb && !index && !middle && !ring && !pinky) {
+    return "fist";
+  }
+  // 5. Open Hand
+  if (index && middle && ring && pinky) {
+    return "open_hand";
   }
   // 6. OK Sign
   const d48x = landmarks[4].x - landmarks[8].x;
