@@ -28,6 +28,7 @@ import base64
 from io import BytesIO
 import time
 from models.hand_tracker import HandBoneTracker
+from gui.api_utils import sanitize_filename_stem, resolve_safe_checkpoint_path
 
 
 # ── Lifespan (modern FastAPI, replaces deprecated @app.on_event) ───────────────
@@ -42,9 +43,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+# Local development dashboard only — the frontend runs on Vite (5173/4173).
+LOCAL_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=LOCAL_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -115,7 +124,7 @@ def health_check():
     return {
         "status": "healthy",
         "service": "raez-hand-bone-tracker-backend",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "cuda_available": torch.cuda.is_available(),
     }
 
@@ -177,7 +186,7 @@ async def start_train(stage: int = 1, resume: bool = True):
     elif stage == 3:
         config_name = "stage3_finetune.yaml"
     else:
-        config_name = f"stage{stage}_pretrain.yaml"
+        return {"error": f"Invalid stage '{stage}'. Expected 1, 2 or 3."}
         
     config_path = f"configs/training/{config_name}"
     python_exe = str(PROJECT_ROOT / ".venv" / "Scripts" / "python.exe")
@@ -377,14 +386,28 @@ def get_latest_checkpoint_path():
     ckpts = sorted(ckpt_dir.glob("**/*.ckpt"), key=os.path.getmtime, reverse=True)
     return str(ckpts[0]) if ckpts else None
 
+def _torch_load_safe(checkpoint_path: str):
+    """torch.load with restricted unpickling; falls back for legacy checkpoints.
+
+    The path is already validated by resolve_safe_checkpoint_path(), so this
+    only ever touches .ckpt files inside the project's checkpoints/ folder.
+    """
+    try:
+        return torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+    except Exception:
+        # Lightning checkpoints may embed non-allowlisted objects on older
+        # versions; the path restriction above is the actual security boundary.
+        return torch.load(checkpoint_path, map_location="cpu")
+
+
 def load_checkpoint_into_model(checkpoint_path: str):
     global _model_instance
     try:
-        
+
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"[RAEZ] Loading checkpoint: {checkpoint_path} on {device}...")
-        
-        checkpoint = torch.load(checkpoint_path, map_location="cpu")
+
+        checkpoint = _torch_load_safe(checkpoint_path)
         config = checkpoint.get('hyper_parameters', {}).get('config', {})
         backbone_name = config.get('backbone', 'mobilenetv3_large_100')
         print(f"[RAEZ] Detected backbone from checkpoint: {backbone_name}")
@@ -418,13 +441,15 @@ def load_checkpoint_into_model(checkpoint_path: str):
 # ── /load-checkpoint ──────────────────────────────────────────────────────────
 @app.post("/load-checkpoint")
 def load_checkpoint(checkpoint_data: dict):
-    path = checkpoint_data.get("path")
-    if not path or not os.path.exists(path):
-        return {"error": f"Checkpoint path '{path}' not found."}
-    
-    success = load_checkpoint_into_model(path)
+    raw_path = checkpoint_data.get("path")
+    ckpt_dir = PROJECT_ROOT / "checkpoints"
+    path = resolve_safe_checkpoint_path(raw_path, ckpt_dir)
+    if path is None:
+        return {"error": f"Checkpoint '{raw_path}' not found or outside checkpoints/."}
+
+    success = load_checkpoint_into_model(str(path))
     if success:
-        return {"message": f"Successfully loaded checkpoint: {os.path.basename(path)}"}
+        return {"message": f"Successfully loaded checkpoint: {path.name}"}
     else:
         return {"error": "Failed to load checkpoint. Check backend console logs."}
 
@@ -443,7 +468,7 @@ async def save_custom_label(data: dict):
         img_bytes = base64.b64decode(img_b64)
         img = Image.open(BytesIO(img_bytes)).convert("RGB")
         
-        pose_name = data.get("pose_name", "unknown")
+        pose_name = sanitize_filename_stem(data.get("pose_name", "unknown"))
         keypoints_2d = data.get("keypoints_2d", [])
         keypoints_3d = data.get("keypoints_3d", [])
         
@@ -625,4 +650,4 @@ async def test_image(image_data: dict):
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run(app, host="127.0.0.1", port=8000, reload=False)
