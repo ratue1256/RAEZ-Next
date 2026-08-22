@@ -193,6 +193,10 @@ class HandTrackerRT:
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
+        if not cap.isOpened():
+            print(f"Impossible d'ouvrir la caméra {camera_id}.")
+            return
+
         print("Hand Tracker démarré — 'q' pour quitter, 'r' pour réinitialiser le ROI")
         while True:
             ret, frame = cap.read()

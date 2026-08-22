@@ -66,6 +66,8 @@ class OneEuroFilter:
     ) -> np.ndarray:
         x = np.asarray(x, dtype=np.float32)
         t_e = float(dt) if dt else (1.0 / self.freq)
+        if t_e <= 0:
+            t_e = 1.0 / self.freq
 
         if self.x_prev is None:
             self.x_prev = x.copy()

@@ -20,6 +20,7 @@ import subprocess
 import signal
 import asyncio
 import csv
+import json
 import collections
 import torch
 import numpy as np
@@ -107,6 +108,7 @@ async def consume_logs():
                 except Exception:
                     active_websockets.discard(ws)
         # Notify
+        logs_queue.append("--- Process Finished ---")
         for ws in list(active_websockets):
             try:
                 await ws.send_text("--- Process Finished ---")
@@ -273,30 +275,17 @@ async def websocket_logs(websocket: WebSocket):
 
 
 # ── /metrics ──────────────────────────────────────────────────────────────────
-@app.get("/metrics")
-def get_metrics():
-    logs_dir = PROJECT_ROOT / "logs"
-    if not logs_dir.exists():
-        return {"error": "No logs folder found"}
+_metrics_cache: dict = {"key": None, "payload": None}
 
-    csv_files = list(logs_dir.glob("**/metrics.csv"))
-    if not csv_files:
-        return {"error": "No metrics.csv found yet. Launch training first."}
 
-    # Find the latest modified CSV to identify the active stage
-    latest_csv = max(csv_files, key=os.path.getmtime)
-    stage_dir = latest_csv.parent.parent
-    
-    # Find all metrics.csv belonging to the same stage directory
-    stage_csvs = list(stage_dir.glob("**/metrics.csv"))
-    
+def _parse_stage_metrics(stage_csvs) -> list:
+    """Parse every metrics.csv of a stage and merge resumed runs chronologically."""
     def get_version_num(path):
         try:
             return int(path.parent.name.split("_")[-1])
         except Exception:
             return 0
 
-    # Parse and organize metrics by version folder
     version_data = []
     for csv_path in stage_csvs:
         v_num = get_version_num(csv_path)
@@ -312,14 +301,14 @@ def get_metrics():
                         step = int(float(step_str))
                     except ValueError:
                         continue
-                    
+
                     clean = {}
                     for k, v in row.items():
                         try:
                             clean[k] = float(v) if (v is not None and v.strip() != "") else None
                         except (ValueError, AttributeError):
                             clean[k] = v
-                    
+
                     if step not in steps_dict:
                         steps_dict[step] = {}
                     for k, v in clean.items():
@@ -340,12 +329,12 @@ def get_metrics():
     merged_data = {}
     for v_num, steps_dict in version_data:
         min_step = min(steps_dict.keys())
-        
+
         # Discard any steps >= min_step from already merged data
         keys_to_delete = [k for k in merged_data.keys() if k >= min_step]
         for k in keys_to_delete:
             del merged_data[k]
-            
+
         # Merge the new run's steps
         for step, row in steps_dict.items():
             if step not in merged_data:
@@ -356,12 +345,44 @@ def get_metrics():
     sorted_steps = sorted(merged_data.keys())
     data = []
     for step in sorted_steps:
-        # Reconstruct the row dict including the step key
         row = {"step": step}
         row.update(merged_data[step])
         data.append(row)
+    return data
 
-    print(f"[RAEZ] Returned {len(data)} merged metrics rows for {stage_dir.name} (merged {len(stage_csvs)} runs)")
+
+@app.get("/metrics")
+def get_metrics():
+    logs_dir = PROJECT_ROOT / "logs"
+    if not logs_dir.exists():
+        return {"error": "No logs folder found"}
+
+    csv_files = list(logs_dir.glob("**/metrics.csv"))
+    if not csv_files:
+        return {"error": "No metrics.csv found yet. Launch training first."}
+
+    # Find the latest modified CSV to identify the active stage
+    latest_csv = max(csv_files, key=os.path.getmtime)
+    stage_dir = latest_csv.parent.parent
+
+    # Find all metrics.csv belonging to the same stage directory
+    stage_csvs = list(stage_dir.glob("**/metrics.csv"))
+
+    # Cache keyed on file names + mtimes so polling stays cheap between runs
+    cache_key = (
+        stage_dir.name,
+        tuple(sorted((p.name, os.path.getmtime(p)) for p in stage_csvs)),
+    )
+    if _metrics_cache["key"] == cache_key:
+        return _metrics_cache["payload"]
+
+    data = _parse_stage_metrics(stage_csvs)
+
+    print(f"[RAEZ] Returned {len(data)} merged metrics rows for {stage_dir.name} "
+          f"(merged {len(stage_csvs)} runs)")
+
+    _metrics_cache["key"] = cache_key
+    _metrics_cache["payload"] = data
     return data
 
 
@@ -458,12 +479,6 @@ def load_checkpoint(checkpoint_data: dict):
 async def save_custom_label(data: dict):
     print("[RAEZ] Saving custom labeled data...")
     try:
-        import base64
-        from io import BytesIO
-        from PIL import Image
-        import time
-        import json
-        
         img_b64 = data["image"].split(",")[-1]
         img_bytes = base64.b64decode(img_b64)
         img = Image.open(BytesIO(img_bytes)).convert("RGB")
@@ -531,50 +546,53 @@ async def get_custom_dataset_counts():
     except Exception as e:
         return {"error": str(e)}
 
-_onnx_sessions = {}
+_onnx_sessions = {}  # mode -> (mtime, session)
 
 def get_onnx_session(mode: str):
     global _onnx_sessions
-    if mode not in _onnx_sessions:
-        model_path = ""
-        if mode == "onnx_fp32":
-            model_path = str(PROJECT_ROOT / "exports" / "hand_tracker_simplified.onnx")
-        elif mode == "onnx_int8":
-            model_path = str(PROJECT_ROOT / "exports" / "hand_tracker_int8.onnx")
-        
-        if not model_path or not os.path.exists(model_path):
-            print(f"[RAEZ] ONNX model path not found: {model_path}")
-            return None
-        
-        try:
-            print(f"[RAEZ] Loading ONNX session for {mode} from {model_path}...")
-            import onnxruntime as ort
-            providers = []
-            if torch.cuda.is_available():
-                providers.append(('CUDAExecutionProvider', {
-                    'device_id': 0,
-                    'arena_extend_strategy': 'kNextPowerOfTwo',
-                    'gpu_mem_limit': 1 * 1024 * 1024 * 1024,
-                    'cudnn_conv_algo_search': 'EXHAUSTIVE',
-                    'do_copy_in_default_stream': True,
-                }))
-            providers.append('CPUExecutionProvider')
-            
-            sess_options = ort.SessionOptions()
-            sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-            sess_options.intra_op_num_threads = 4
-            
-            _onnx_sessions[mode] = ort.InferenceSession(
-                model_path,
-                sess_options=sess_options,
-                providers=providers
-            )
-            print(f"[RAEZ] ONNX session {mode} loaded successfully.")
-        except Exception as e:
-            print(f"[RAEZ] Error loading ONNX session: {e}")
-            return None
-            
-    return _onnx_sessions[mode]
+    model_path = ""
+    if mode == "onnx_fp32":
+        model_path = str(PROJECT_ROOT / "exports" / "hand_tracker_simplified.onnx")
+    elif mode == "onnx_int8":
+        model_path = str(PROJECT_ROOT / "exports" / "hand_tracker_int8.onnx")
+
+    if not model_path or not os.path.exists(model_path):
+        return None
+
+    current_mtime = os.path.getmtime(model_path)
+    cached = _onnx_sessions.get(mode)
+    if cached is not None and cached[0] == current_mtime:
+        return cached[1]
+
+    try:
+        print(f"[RAEZ] Loading ONNX session for {mode} from {model_path}...")
+        import onnxruntime as ort
+        providers = []
+        if torch.cuda.is_available():
+            providers.append(('CUDAExecutionProvider', {
+                'device_id': 0,
+                'arena_extend_strategy': 'kNextPowerOfTwo',
+                'gpu_mem_limit': 1 * 1024 * 1024 * 1024,
+                'cudnn_conv_algo_search': 'EXHAUSTIVE',
+                'do_copy_in_default_stream': True,
+            }))
+        providers.append('CPUExecutionProvider')
+
+        sess_options = ort.SessionOptions()
+        sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        sess_options.intra_op_num_threads = 4
+
+        session = ort.InferenceSession(
+            model_path,
+            sess_options=sess_options,
+            providers=providers
+        )
+        _onnx_sessions[mode] = (current_mtime, session)
+        print(f"[RAEZ] ONNX session {mode} loaded successfully.")
+        return session
+    except Exception as e:
+        print(f"[RAEZ] Error loading ONNX session: {e}")
+        return None
 
 # ── /test-image ──────────────────────────────────────────────────────────────────────────────
 @app.post("/test-image")

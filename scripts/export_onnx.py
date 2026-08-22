@@ -101,19 +101,24 @@ def export_to_onnx(checkpoint_path: str, output_path: str):
 
 def _auto_best_checkpoint() -> str:
     from pathlib import Path
+    import re
+
     ckpt_dir = Path("checkpoints")
     if not ckpt_dir.exists():
         return "checkpoints/last.ckpt"
 
     ckpts = list(ckpt_dir.glob("**/*.ckpt"))
     best_ckpt, best_mpjpe = None, float("inf")
+    # ModelCheckpoint filename pattern: hand-tracker-{epoch:02d}-{val_mpjpe_3d:.4f}.ckpt
+    score_re = re.compile(r"-(\d+\.\d+)\.ckpt$")
     for c in ckpts:
-        if "val_mpjpe_3d" in c.name:
+        match = score_re.search(c.name)
+        if match:
             try:
-                score = float(c.name.split("val_mpjpe_3d=")[-1].replace(".ckpt", ""))
+                score = float(match.group(1))
                 if score < best_mpjpe:
                     best_mpjpe, best_ckpt = score, c
-            except Exception:
+            except ValueError:
                 pass
     if best_ckpt is None and ckpts:
         ckpts.sort(key=lambda p: p.stat().st_mtime, reverse=True)

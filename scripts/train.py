@@ -144,25 +144,25 @@ def main(config_path, resume=False):
         val_ds = FreiHANDDataset('data/processed/freihand_val.h5', transform=val_transform)
         
     # Set num_workers to 0 on Windows to avoid process-kill shared memory leaks and pagefile growth
-    import os
     num_workers = 0 if os.name == 'nt' else config.get('num_workers', 4)
     persistent_workers = num_workers > 0
-    
+    pin_memory = torch.cuda.is_available()
+
     train_loader = DataLoader(
-        train_ds, 
-        batch_size=config['batch_size'], 
-        shuffle=True, 
+        train_ds,
+        batch_size=config['batch_size'],
+        shuffle=True,
         num_workers=num_workers,
-        pin_memory=False,
+        pin_memory=pin_memory,
         persistent_workers=persistent_workers
     )
-    
+
     val_loader = DataLoader(
-        val_ds, 
-        batch_size=config['batch_size'], 
-        shuffle=False, 
+        val_ds,
+        batch_size=config['batch_size'],
+        shuffle=False,
         num_workers=num_workers,
-        pin_memory=False,
+        pin_memory=pin_memory,
         persistent_workers=persistent_workers
     )
     

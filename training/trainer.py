@@ -21,6 +21,7 @@ class HandTrackerLightning(L.LightningModule):
             lambda_3d=loss_cfg.get('lambda_3d', 2.0),
             lambda_3d_norm=loss_cfg.get('lambda_3d_norm', 1.0),
             lambda_bone=loss_cfg.get('lambda_bone', 0.5),
+            lambda_reproj=loss_cfg.get('lambda_reproj', 0.5),
             lambda_temporal=loss_cfg.get('lambda_temporal', 0.0),
         )
         self.config = config
