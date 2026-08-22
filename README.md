@@ -113,5 +113,34 @@ hand_bone_tracker/
 ├── inference/        # ONNX runtime & One-Euro filter
 ├── models/           # HandBoneTracker architecture & CombinedLoss
 ├── scripts/          # train, export_onnx, quantize, preprocess
+├── tests/            # Pytest suite (model, losses, datasets, filters, API utils)
 └── setup.ps1         # Windows automated install script
 ```
+
+---
+
+## Tests & Quality
+
+```bash
+# Python test suite (37+ tests: model, losses, filters, datasets, API security utils)
+pytest -v tests/
+
+# Lint (errors + pyflakes; config in ruff.toml)
+ruff check .
+
+# Frontend: typecheck + unit tests (vitest) + production build
+cd gui/dashboard
+npm test          # vitest suite
+npm run build     # tsc --noEmit && vite build
+```
+
+CI runs all of the above on every push/PR (see `.github/workflows/ci.yml`).
+
+---
+
+## Security Notes
+
+- The dashboard backend binds to `127.0.0.1` and only accepts CORS origins from
+  `localhost` — it is a local development tool, not a public server.
+- `/load-checkpoint` refuses any path outside `checkpoints/` (path-traversal guard).
+- User-supplied pose names are sanitized into safe file-name stems before saving.
