@@ -1,4 +1,3 @@
-import pytest
 import torch
 from models.losses.combined_loss import CombinedHandLoss
 

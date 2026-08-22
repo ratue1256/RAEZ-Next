@@ -11,7 +11,6 @@ import cv2
 import json
 from pathlib import Path
 from tqdm import tqdm
-import torch
 import random
 import pickle
 
@@ -170,7 +169,8 @@ def preprocess_rhd(raw_path: Path, output_path: Path):
         for i, (sample_id, data) in enumerate(tqdm(anno.items(), desc='RHD Train')):
             img_path = raw_path / 'training' / 'rgb' / f'{sample_id:05d}.png'
             img = cv2.imread(str(img_path))
-            if img is None: continue
+            if img is None:
+                continue
             
             img = cv2.resize(img, TARGET_SIZE)
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)

@@ -1,8 +1,10 @@
+# hand_bone_tracker/scripts/check_env.py
+"""Environment sanity check: verifies every heavy dependency imports."""
 import torch
-import pytorch_lightning
-import albumentations
-import h5py
-import timm
+import pytorch_lightning  # noqa: F401
+import albumentations  # noqa: F401
+import h5py  # noqa: F401
+import timm  # noqa: F401
 
 print('All imports successful!')
 print(f'GPU available: {torch.cuda.is_available()}')

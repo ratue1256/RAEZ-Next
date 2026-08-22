@@ -1,0 +1,8 @@
+# Ruff configuration — errors (E4), warnings-as-errors subset (E7), runtime (E9) and pyflakes (F).
+[lint]
+select = ["E4", "E7", "E9", "F"]
+
+[lint.per-file-ignores]
+# gui/server.py configures sys.path / stdout encoding BEFORE importing project
+# modules on purpose: the import order is the whole point of those lines.
+"gui/server.py" = ["E402"]

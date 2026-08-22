@@ -1,12 +1,10 @@
-import pytest
-import torch
 import numpy as np
 from datasets.custom_dataset import CustomHandDataset
 
 def test_custom_dataset_synthetic(tmp_path):
     import json
     import cv2
-    
+
     # Create mock images and labels directories
     images_dir = tmp_path / "images"
     labels_dir = tmp_path / "labels"

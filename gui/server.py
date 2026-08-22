@@ -17,7 +17,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import subprocess
-import signal
 import asyncio
 import csv
 import json
@@ -454,7 +453,7 @@ def load_checkpoint_into_model(checkpoint_path: str):
         _model_instance = model
         print(f"[RAEZ] Model loaded on {device} and ready for inference.")
         return True
-    except Exception as e:
+    except Exception:
         import traceback
         print(f"[RAEZ] Error loading checkpoint: {traceback.format_exc()}")
         return False

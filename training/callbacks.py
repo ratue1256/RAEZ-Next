@@ -1,5 +1,4 @@
 import torch
-import pytorch_lightning as L
 from pytorch_lightning.callbacks import (
     ModelCheckpoint,
     EarlyStopping,

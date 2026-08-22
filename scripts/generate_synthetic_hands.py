@@ -98,7 +98,7 @@ def generate_hand_pose():
         
         # Local lengths scaled
         l_wrist_mcp = L_wrist_to_mcp[f] * size_factor
-        l_seg = [l * size_factor for l in L_finger_segments[f]]
+        l_seg = [seg * size_factor for seg in L_finger_segments[f]]
         
         # Base spread/tilt
         spread_ang, tilt_ang = base_spread[f]
@@ -253,12 +253,17 @@ def render_synthetic_hand(joints_3d, bg_img):
     
     # Mapping joint indices to joint types for radius lookup
     def get_joint_radius(j_idx):
-        if j_idx == 0: return radii['wrist']
+        if j_idx == 0:
+            return radii['wrist']
         finger_pos = (j_idx - 1) % 4
-        if finger_pos == 0: return radii['mcp']
-        elif finger_pos == 1: return radii['pip']
-        elif finger_pos == 2: return radii['dip']
-        else: return radii['tip']
+        if finger_pos == 0:
+            return radii['mcp']
+        elif finger_pos == 1:
+            return radii['pip']
+        elif finger_pos == 2:
+            return radii['dip']
+        else:
+            return radii['tip']
 
     # Draw palm polygon first
     palm_indices = [0, 1, 5, 9, 13, 17]

@@ -1,9 +1,9 @@
 # run_gui.ps1 - Launcher for RAEZ Hand Bone Tracker (FastAPI + Vite)
-# Can be run from any directory
+# Can be run from any directory. Project root is derived from this script's location.
 
-$ProjectRoot = "G:\RAEZ-Next\hand_bone_tracker"
-$Python = "$ProjectRoot\.venv\Scripts\python.exe"
-$Dashboard = "$ProjectRoot\gui\dashboard"
+$ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$Python = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+$Dashboard = Join-Path $ProjectRoot "gui\dashboard"
 
 Write-Host ""
 Write-Host "==============================================" -ForegroundColor Cyan

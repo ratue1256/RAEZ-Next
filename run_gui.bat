@@ -1,6 +1,6 @@
 @echo off
 title RAEZ Hand Bone Tracker - Launcher
-cd /d "G:\RAEZ-Next\hand_bone_tracker"
+cd /d "%~dp0"
 
 echo ==============================================
 echo    RAEZ Hand Bone Tracker - GUI Launcher
@@ -19,7 +19,7 @@ if not exist "gui\dashboard\node_modules" (
     echo [!] node_modules missing. Installing npm packages...
     cd gui\dashboard
     call npm install
-    cd /d "G:\RAEZ-Next\hand_bone_tracker"
+    cd /d "%~dp0"
 )
 
 :: Start Backend in a separate window

@@ -137,7 +137,7 @@ def main(config_path, resume=False):
     elif config['dataset'] == 'synthetic':
         train_ds = FreiHANDDataset('data/processed/synthetic_train.h5', transform=train_transform)
         val_ds = FreiHANDDataset('data/processed/synthetic_val.h5', transform=val_transform)
-        print(f"📦 [IA TRAINER] Chargement de notre propre dataset synthétique (RHD fait maison).")
+        print("📦 [IA TRAINER] Chargement de notre propre dataset synthétique (RHD fait maison).")
     else:
         # Fallback to FreiHAND
         train_ds = FreiHANDDataset('data/processed/freihand_train.h5', transform=train_transform)

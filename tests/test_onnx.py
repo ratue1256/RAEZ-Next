@@ -1,4 +1,3 @@
-import pytest
 import torch
 from scripts.export_onnx import ExportWrapper
 from models.hand_tracker import HandBoneTracker

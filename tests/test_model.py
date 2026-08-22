@@ -1,4 +1,3 @@
-import pytest
 import torch
 from models.hand_tracker import HandBoneTracker, BiomechanicalFKLayer, JOINT_PARENTS, MAX_BONE_LENGTH
 
