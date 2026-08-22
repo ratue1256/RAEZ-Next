@@ -1,6 +1,6 @@
-# Hand Bone Tracker (v2.0)
+# Hand Bone Tracker (v2.1)
 
-Real-time 3D hand and skeleton tracking with differentiable biomechanical constraints. Runs on CPU (60+ FPS in INT8) and CUDA.
+Real-time 3D hand and skeleton tracking with differentiable biomechanical constraints and pinhole perspective reprojection. Runs on CPU (60+ FPS in INT8) and CUDA.
 
 Includes a complete PyTorch Lightning training pipeline, ONNX export/quantization tools, and a fullstack web dashboard (FastAPI + React).
 

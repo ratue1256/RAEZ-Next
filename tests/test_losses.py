@@ -27,13 +27,23 @@ def test_bone_length_loss_zero_on_target():
     loss = criterion.bone_length_loss(target_3d, target_3d)
     assert torch.isclose(loss, torch.tensor(0.0), atol=1e-6)
 
+def test_reprojection_loss():
+    criterion = CombinedHandLoss()
+    pred_3d = torch.randn(2, 21, 3)
+    target_2d = torch.rand(2, 21, 2)
+    
+    loss = criterion.reprojection_loss(pred_3d, target_2d)
+    assert loss.item() >= 0.0
+    assert not torch.isnan(loss)
+
 def test_combined_loss_backward():
     criterion = CombinedHandLoss(
         lambda_heatmap=1.0,
         lambda_coord2d=5.0,
         lambda_3d=2.0,
         lambda_3d_norm=1.0,
-        lambda_bone=0.5
+        lambda_bone=0.5,
+        lambda_reproj=0.5
     )
     
     preds = {
@@ -51,6 +61,7 @@ def test_combined_loss_backward():
     assert "coord2d" in losses
     assert "3d" in losses
     assert "bone" in losses
+    assert "reproj" in losses
     
     losses["total"].backward()
     assert preds["heatmaps"].grad is not None
